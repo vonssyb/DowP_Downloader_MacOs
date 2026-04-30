@@ -3670,6 +3670,7 @@ class ImageToolsTab(ctk.CTkFrame):
                 else:
                     title_to_show = os.path.splitext(os.path.basename(output_path))[0]
                 
+                title_to_show = self.app.sanitize_title_global(title_to_show)
                 self.title_entry.delete(0, "end")
                 self.title_entry.insert(0, title_to_show) 
                 return
@@ -3686,6 +3687,7 @@ class ImageToolsTab(ctk.CTkFrame):
                 else:
                      title_to_show = title_no_ext
 
+            title_to_show = self.app.sanitize_title_global(title_to_show)
             self.title_entry.delete(0, "end")
             self.title_entry.insert(0, title_to_show)
             

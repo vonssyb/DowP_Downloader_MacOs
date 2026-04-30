@@ -172,15 +172,13 @@ def importar_a_davinci(file_paths, log_callback=None, import_to_timeline=True, b
                 folder_type = category
                 break
         
-        target_folder = obtener_o_crear_carpeta(mp, main_folder, folder_type)
-        if target_folder:
-            mp.SetCurrentFolder(target_folder)
-        else:
-            if log_callback: log_callback(f"WARNING: No se pudo establecer la carpeta '{folder_type}', importando a la raíz.")
+        # --- IMPORTACIÓN INTELIGENTE ---
+        # 1. Forzar importación a la raíz del Media Pool para inspeccionar
+        mp.SetCurrentFolder(root)
         
         # Normalizar ruta para Windows/Resolve
         abs_path = os.path.abspath(path)
-        if log_callback: log_callback(f"DEBUG: [DaVinci] Intentando ImportMedia con: {abs_path}")
+        if log_callback: log_callback(f"DEBUG: [DaVinci] Intentando ImportMedia (Raíz): {abs_path}")
         
         clips_pool = mp.ImportMedia([abs_path])
         
@@ -196,18 +194,57 @@ def importar_a_davinci(file_paths, log_callback=None, import_to_timeline=True, b
                 if log_callback: log_callback(f"ERROR: Falló la importación al Media Pool: {os.path.basename(path)}")
                 exito_total = False
                 continue
-            else:
-                if log_callback: log_callback(f"LOG: [DaVinci] Importación exitosa usando ruta corta.")
-            
+        
+        clip_item = clips_pool[0]
+        
+        # 2. VERIFICACIÓN DE CONTENIDO REAL (Detectar Audio en contenedores Video)
+        has_video = folder_type == "Video" or folder_type == "Imagen"
+        has_audio = folder_type == "Audio" or folder_type == "Video"
+        
+        if folder_type == "Video":
+            try:
+                # Obtenemos todas las propiedades para inspeccionar
+                props = clip_item.GetClipProperty()
+                v_codec = ""
+                v_res = ""
+                
+                if isinstance(props, dict):
+                    v_codec = props.get("Video Codec", "")
+                    v_res = props.get("Resolution", "")
+                else:
+                    # Fallback si GetClipProperty() no devolvió dict
+                    v_codec = clip_item.GetClipProperty("Video Codec")
+                    v_res = clip_item.GetClipProperty("Resolution")
+                
+                # Si no tiene codec de video ni resolución, es un audio "disfrazado" de video (ej: .mp4 solo audio)
+                if (not v_codec or v_codec == "N/A" or v_codec == "") and (not v_res or v_res == ""):
+                    if log_callback: log_callback(f"INFO: [DaVinci] '{os.path.basename(path)}' detectado como AUDIO PURO (contenedor {ext}).")
+                    folder_type = "Audio"
+                    has_video = False
+                    has_audio = True
+            except Exception as e:
+                if log_callback: log_callback(f"DEBUG: Error inspeccionando propiedades del clip: {e}")
+
+        # 3. MOVER A LA CARPETA CORRECTA
+        target_folder = obtener_o_crear_carpeta(mp, main_folder, folder_type)
+        if target_folder:
+            if log_callback: log_callback(f"DEBUG: Moviendo clip a carpeta: {folder_type}")
+            mp.MoveClips([clip_item], target_folder)
+        
         # Si hay línea de tiempo y el usuario lo permite, insertar el clip
         if timeline and import_to_timeline:
-            clip_item = clips_pool[0]
             tc_string = timeline.GetCurrentTimecode()
             fps = float(project.GetSetting("timelineFrameRate"))
             start_frame = timecode_a_frames(tc_string, fps)
             
-            # Duración en frames
-            duracion = float(clip_item.GetClipProperty("End")) - float(clip_item.GetClipProperty("Start"))
+            # Duración en frames (usamos float por seguridad)
+            try:
+                start_p = float(clip_item.GetClipProperty("Start"))
+                end_p = float(clip_item.GetClipProperty("End"))
+                duracion = end_p - start_p
+            except:
+                duracion = 0
+                
             end_frame = start_frame + duracion
             
             # Buscar pista libre simétrica
@@ -215,10 +252,6 @@ def importar_a_davinci(file_paths, log_callback=None, import_to_timeline=True, b
             num_v_tracks = timeline.GetTrackCount("video")
             num_a_tracks = timeline.GetTrackCount("audio")
             max_pistas = max(num_v_tracks, num_a_tracks)
-            
-            # Determinar si el clip tiene video y/o audio
-            has_video = folder_type == "Video" or folder_type == "Imagen"
-            has_audio = folder_type == "Audio" or folder_type == "Video"
             
             for i in range(1, max_pistas + 2):
                 video_ok = True
@@ -236,7 +269,7 @@ def importar_a_davinci(file_paths, log_callback=None, import_to_timeline=True, b
             # Asegurar que las pistas existen
             while timeline.GetTrackCount("video") < pista_final:
                 timeline.AddTrack("video")
-            while timeline.GetTrackCount("audio") < pista_final:
+            while timeline.GetTrackCount("audio") < (pista_final if has_audio else 0):
                 timeline.AddTrack("audio", "stereo")
             
             # Inserción

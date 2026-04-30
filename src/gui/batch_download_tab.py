@@ -1493,8 +1493,9 @@ class BatchDownloadTab(ctk.CTkFrame):
                 print("DEBUG: Llenando panel para trabajo PLAYLIST.")
                 
                 # 1. Título
-                self.title_entry.delete(0, 'end')
-                self.title_entry.insert(0, job.config.get('title', 'Playlist'))
+                raw_title = job.config.get('title', 'Playlist')
+                clean_title = self.app.sanitize_title_global(raw_title)
+                self.title_entry.insert(0, clean_title)
                 
                 # 2. Lógica de Miniatura de Playlist (CORREGIDA)
                 thumb_url = None
@@ -1589,8 +1590,9 @@ class BatchDownloadTab(ctk.CTkFrame):
                 format_info = local_info.get('format', {})
                 
                 # --- 1. Título ---
-                self.title_entry.delete(0, 'end')
-                self.title_entry.insert(0, info.get('title', 'archivo_local'))
+                raw_title = info.get('title', 'archivo_local')
+                clean_title = self.app.sanitize_title_global(raw_title)
+                self.title_entry.insert(0, clean_title)
                 
                 # --- 2. Thumbnail (CORREGIDO) ---
                 # Recuperamos la ruta local del config
@@ -1752,6 +1754,9 @@ class BatchDownloadTab(ctk.CTkFrame):
                 # Fallback final solo si realmente no hay título
                 if not title:
                     title = f"video_{job.job_id[:6]}"
+
+                # ✅ Limpiar el título final
+                title = self.app.sanitize_title_global(title)
 
                 # ✅ Actualizar el config del job con el título correcto
                 job.config['title'] = title

@@ -57,6 +57,7 @@ from .image_tools_tab import ImageToolsTab
 from .config_tab import ConfigTab
 from src.core.integration_manager import IntegrationManager
 
+from src.core.text_utils import clean_text_for_davinci
 from .dialogs import (
     ConflictDialog, LoadingWindow, CompromiseDialog, 
     SimpleMessageDialog, SavePresetDialog, PlaylistErrorDialog,
@@ -303,7 +304,7 @@ def handle_adobe_push_files(data):
 def run_flask_app():
     """Función que corre el servidor. Usa gevent para WebSockets."""
     print("INFO: Iniciando servidor de integración en el puerto 7788 con WebSockets.")
-    socketio.run(flask_app, host='0.0.0.0', port=7788, log_output=False)
+    socketio.run(flask_app, host='127.0.0.1', port=7788, log_output=False)
 
 if getattr(sys, 'frozen', False):
     APP_BASE_PATH = os.path.dirname(sys.executable)
@@ -709,6 +710,7 @@ class MainWindow(TkBase):
         self.inkscape_version = ""
         self.selected_theme_accent = "blue"
         self.appearance_mode = "System" # Default
+        self.clean_titles = False # Limpieza de emojis en títulos
         
         # --- INTENTAR CARGAR CONFIGURACIÓN GUARDADA ---
         try:
@@ -764,6 +766,7 @@ class MainWindow(TkBase):
                     self.davinci_import_image = settings.get("davinci_import_image", self.davinci_import_image)
                     self.davinci_import_everything = settings.get("davinci_import_everything", self.davinci_import_everything)
                     self.davinci_import_to_timeline = settings.get("davinci_import_to_timeline", self.davinci_import_to_timeline)
+                    self.clean_titles = settings.get("clean_titles", False)
 
                 print(f"DEBUG: Configuración cargada exitosamente.")
             else:
@@ -1638,7 +1641,8 @@ class MainWindow(TkBase):
             "inkscape_version": getattr(self, 'inkscape_version', ""),
             "vector_force_background": getattr(self, 'vector_force_background', False),
             "selected_theme_accent": self.selected_theme_accent,
-            "appearance_mode": self.appearance_mode
+            "appearance_mode": self.appearance_mode,
+            "clean_titles": self.clean_titles
         }
 
         # 4. Escribir en el archivo
@@ -2531,3 +2535,9 @@ class MainWindow(TkBase):
                 
         # (Aquí se añadirán el resto de pestañas cuando se refactoricen)
         print("INFO: Tema actualizado dinámicamente en las pestañas compatibles.")
+
+    def sanitize_title_global(self, text):
+        """
+        Wrapper global para limpiar títulos basado en el ajuste del usuario.
+        """
+        return clean_text_for_davinci(text, clean_emojis=self.clean_titles)

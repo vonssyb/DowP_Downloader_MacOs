@@ -415,6 +415,33 @@ class ConfigTab(ctk.CTkFrame):
         self.ink_status_label = ctk.CTkLabel(ink_status_row, text=initial_status, font=ctk.CTkFont(size=11, weight="bold"), text_color=initial_color)
         self.ink_status_label.pack(side="left")
 
+        # --- BLOQUE: DESCARGAS (NUEVO) ---
+        ctk.CTkLabel(frame_general, text="Descargas", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(10, 2), padx=10)
+        ctk.CTkLabel(frame_general, text="Opciones globales para el manejo de archivos y metadatos.", font=ctk.CTkFont(size=11), text_color="gray60").pack(anchor="w", pady=(0, 10), padx=10)
+
+        self.downloads_frame = ctk.CTkFrame(frame_general, fg_color=self.CONFIG_CARD_BG, corner_radius=self.CONFIG_CARD_RADIUS, border_width=1, border_color=self.CONFIG_CARD_BORDER)
+        self.downloads_frame.pack(fill="x", pady=5, padx=5)
+        self.config_cards.append(self.downloads_frame)
+
+        downloads_group = ctk.CTkFrame(self.downloads_frame, fg_color="transparent")
+        downloads_group.pack(fill="x", padx=15, pady=15)
+
+        self.clean_titles_var = ctk.BooleanVar(value=getattr(self.app, 'clean_titles', False))
+        self.clean_titles_switch = ctk.CTkSwitch(
+            downloads_group, 
+            text="Limpieza automática de títulos (Eliminar emojis y caracteres especiales)", 
+            variable=self.clean_titles_var, 
+            command=self._on_title_cleanup_toggle
+        )
+        self.clean_titles_switch.pack(anchor="w")
+        
+        ctk.CTkLabel(
+            downloads_group, 
+            text="Elimina emojis y símbolos para evitar errores en DaVinci Resolve y Adobe.", 
+            font=ctk.CTkFont(size=11), 
+            text_color="gray60"
+        ).pack(anchor="w", padx=25, pady=(5, 0))
+
         # --- BLOQUE: INTEGRACIONES (NUEVO) ---
         ctk.CTkLabel(frame_general, text="Integraciones", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(10, 2), padx=10)
         ctk.CTkLabel(frame_general, text="Conecta DowP con aplicaciones de edición externas.", font=ctk.CTkFont(size=11), text_color="gray60").pack(anchor="w", pady=(0, 10), padx=10)
@@ -2952,6 +2979,12 @@ class ConfigTab(ctk.CTkFrame):
     def _on_vector_bg_toggle(self):
         self.app.vector_force_background = self.vector_bg_var.get()
         self.app.save_settings()
+
+    def _on_title_cleanup_toggle(self):
+        """Maneja el cambio en el ajuste de limpieza de títulos."""
+        self.app.clean_titles = self.clean_titles_var.get()
+        self.app.save_settings()
+        print(f"DEBUG: Limpieza de títulos establecida en: {self.app.clean_titles}")
 
     def _on_inkscape_toggle(self):
         self.app.inkscape_enabled = self.inkscape_enabled_var.get()

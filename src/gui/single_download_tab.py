@@ -1850,7 +1850,9 @@ class SingleDownloadTab(ctk.CTkFrame):
             else:
                 self.original_video_width = 0
                 self.original_video_height = 0
-            self.title_entry.insert(0, os.path.splitext(os.path.basename(filepath))[0])
+            raw_title = os.path.splitext(os.path.basename(filepath))[0]
+            clean_title = self.app.sanitize_title_global(raw_title)
+            self.title_entry.insert(0, clean_title)
             self.video_duration = float(info.get('format', {}).get('duration', 0))
             if video_stream:
                 self.mode_selector.set("Video+Audio")
@@ -6153,8 +6155,10 @@ class SingleDownloadTab(ctk.CTkFrame):
                 info['subtitles'] = {}
                 info['automatic_captions'] = {}
                 self._clear_subtitle_menus()
+            raw_title = info.get('title', 'Sin título')
+            clean_title = self.app.sanitize_title_global(raw_title)
             self.title_entry.delete(0, 'end')
-            self.title_entry.insert(0, info.get('title', 'Sin título'))
+            self.title_entry.insert(0, clean_title)
             self.video_duration = info.get('duration', 0)
             formats = info.get('formats', [])
             self.has_video_streams = any(f.get('height') for f in formats)
