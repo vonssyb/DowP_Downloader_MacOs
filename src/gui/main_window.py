@@ -711,6 +711,7 @@ class MainWindow(TkBase):
         self.selected_theme_accent = "blue"
         self.appearance_mode = "System" # Default
         self.clean_titles = False # Limpieza de emojis en títulos
+        self.last_seen_version = "" # Para el splash screen de novedades
         
         # --- INTENTAR CARGAR CONFIGURACIÓN GUARDADA ---
         try:
@@ -767,6 +768,7 @@ class MainWindow(TkBase):
                     self.davinci_import_everything = settings.get("davinci_import_everything", self.davinci_import_everything)
                     self.davinci_import_to_timeline = settings.get("davinci_import_to_timeline", self.davinci_import_to_timeline)
                     self.clean_titles = settings.get("clean_titles", False)
+                    self.last_seen_version = settings.get("last_seen_version", "")
 
                 print(f"DEBUG: Configuración cargada exitosamente.")
             else:
@@ -1642,7 +1644,8 @@ class MainWindow(TkBase):
             "vector_force_background": getattr(self, 'vector_force_background', False),
             "selected_theme_accent": self.selected_theme_accent,
             "appearance_mode": self.appearance_mode,
-            "clean_titles": self.clean_titles
+            "clean_titles": self.clean_titles,
+            "last_seen_version": getattr(self, 'last_seen_version', "")
         }
 
         # 4. Escribir en el archivo
@@ -1994,12 +1997,38 @@ class MainWindow(TkBase):
             
             print("DEBUG: ✅ Ventana principal mostrada y Splash cerrado")
             
+            # 2. Verificar y mostrar novedades si es una versión nueva
+            self.after(500, self._check_whats_new)
+            
         except Exception as e:
             if self.splash_screen:
                 try: self.splash_screen.destroy()
                 except: pass
             print(f"ERROR mostrando ventana: {e}")
             self.deiconify()
+
+    def _check_whats_new(self):
+        """Muestra la ventana de novedades si la versión actual es más nueva que la última vista."""
+        try:
+            if getattr(self, "last_seen_version", "") != self.APP_VERSION:
+                # Importar la ventana aquí para evitar dependencias circulares y mantenerlo modular
+                from src.gui.whats_new_dialog import WhatsNewDialog
+                
+                # Definir callback para navegar a las integraciones
+                def go_to_integrations():
+                    self.tab_view.set("Ajustes")
+                    if hasattr(self, 'config_tab'):
+                        self.config_tab.scroll_to_integrations()
+
+                # Mostrar la ventana
+                WhatsNewDialog(self, go_to_integrations_callback=go_to_integrations)
+
+                # Actualizar y guardar
+                self.last_seen_version = self.APP_VERSION
+                self.save_settings()
+        except Exception as e:
+            print(f"DEBUG: Error al intentar mostrar Splash Screen de Novedades: {e}")
+
 
     def on_poppler_check_complete(self, status_info):
         """Callback que maneja la comprobación MANUAL de Poppler."""

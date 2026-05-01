@@ -3060,3 +3060,20 @@ class ConfigTab(ctk.CTkFrame):
              template_content = "// No se pudo cargar la plantilla."
 
         ThemeTemplateDialog(self.app, template_content)
+
+    def scroll_to_integrations(self):
+        """Hace scroll automático en la pestaña General hacia la sección de Integraciones."""
+        try:
+            # Seleccionar la pestaña General
+            self.select_section("general")
+            
+            # Obtener el canvas subyacente del ScrollableFrame
+            if "general" in self.sections:
+                frame = self.sections["general"]
+                # Forzar actualización de UI antes de hacer scroll
+                self.update_idletasks()
+                # yview_moveto(1.0) mueve el scrollbar al fondo
+                frame._parent_canvas.yview_moveto(1.0)
+        except Exception as e:
+            print(f"DEBUG: Error al hacer scroll automático a Integraciones: {e}")
+
