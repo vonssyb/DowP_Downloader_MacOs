@@ -1317,47 +1317,43 @@ class QueueManager:
 
             # 9. Lógica de Importación Automática (adaptada para locales)
             thumbnail_path = None
-            if batch_tab and batch_tab.auto_import_checkbox.get():
-                active_target = self.main_app.ACTIVE_TARGET_SID_accessor()
-                if active_target:
+            adobe_active = getattr(self.main_app, "adobe_enabled", True) and getattr(self.main_app, "adobe_import_batch", False)
+            davinci_active = getattr(self.main_app, "davinci_enabled", True) and getattr(self.main_app, "davinci_import_batch", False)
+            
+            if adobe_active or davinci_active:
+                # Generar una miniatura sobre la marcha para la importación
+                try:
+                    print(f"DEBUG: Generando miniatura para importación automática...")
+                    duration = self._get_job_media_duration(job, final_filepath)
+                    temp_thumb_path = self.main_app.ffmpeg_processor.get_frame_from_video(final_filepath, duration)
                     
-                    # Generar una miniatura sobre la marcha para la importación
-                    try:
-                        print(f"DEBUG: Generando miniatura para importación automática...")
-                        duration = self._get_job_media_duration(job, final_filepath)
-                        temp_thumb_path = self.main_app.ffmpeg_processor.get_frame_from_video(final_filepath, duration)
+                    if temp_thumb_path and os.path.exists(temp_thumb_path):
+                        # Mover la miniatura junto al video recodificado
+                        thumb_dir = os.path.dirname(final_filepath)
+                        thumb_name = os.path.splitext(os.path.basename(final_filepath))[0] + ".jpg"
+                        thumbnail_path = os.path.join(thumb_dir, thumb_name)
                         
-                        if temp_thumb_path and os.path.exists(temp_thumb_path):
-                            # Mover la miniatura junto al video recodificado
-                            thumb_dir = os.path.dirname(final_filepath)
-                            thumb_name = os.path.splitext(os.path.basename(final_filepath))[0] + ".jpg"
-                            thumbnail_path = os.path.join(thumb_dir, thumb_name)
+                        if os.path.exists(thumbnail_path):
+                            os.remove(thumbnail_path) # Sobrescribir si ya existe
                             
-                            if os.path.exists(thumbnail_path):
-                                os.remove(thumbnail_path) # Sobrescribir si ya existe
-                                
-                            shutil.move(temp_thumb_path, thumbnail_path)
-                            print(f"DEBUG: Miniatura generada para importación: {thumbnail_path}")
-                    except Exception as e:
-                        print(f"ADVERTENCIA: No se pudo generar la miniatura para importar: {e}")
+                        shutil.move(temp_thumb_path, thumbnail_path)
+                        print(f"DEBUG: Miniatura generada para importación: {thumbnail_path}")
+                except Exception as e:
+                    print(f"ADVERTENCIA: No se pudo generar la miniatura para importar: {e}")
 
-                    # Determinar el 'bin' de destino
-                    target_bin_name = None
-                    if hasattr(self, 'subfolder_path') and self.subfolder_path:
-                        target_bin_name = os.path.basename(os.path.normpath(self.subfolder_path))
-                    
-                    # Armar el paquete de archivos
-                    file_package = {
-                        "video": final_filepath.replace('\\', '/'),
-                        "thumbnail": thumbnail_path.replace('\\', '/') if thumbnail_path else None,
-                        "subtitle": None,
-                        "targetBin": target_bin_name
-                    }
-                    
-                    print(f"INFO: [Lote Local] Enviando paquete a CEP: {file_package}")
-                    
-                    # Enviar el paquete
-                    self.main_app.socketio.emit('new_file', {'filePackage': file_package}, to=active_target)
+            # Determinar el 'bin' de destino
+            target_bin_name = None
+            if hasattr(self, 'subfolder_path') and self.subfolder_path:
+                target_bin_name = os.path.basename(os.path.normpath(self.subfolder_path))
+            
+            # Enviar a integraciones
+            self.main_app.integration_manager.broadcast_import(
+                source_path=input_file,
+                final_path=final_filepath,
+                thumb_path=thumbnail_path,
+                workflow_type="batch",
+                bin_name=target_bin_name
+            )
 
         except Exception as e:
             # Si falla, la excepción será capturada por _worker_thread
@@ -1439,37 +1435,50 @@ class QueueManager:
             self.ui_callback(job.job_id, "COMPLETED", f"Miniatura guardada: {os.path.basename(final_path)}")
 
             # 1. Verificar si el usuario quiere importar
-            batch_tab = self.main_app.batch_tab
-            if batch_tab and batch_tab.auto_import_checkbox.get():
-                
-                # 2. Verificar si hay una extensión de Adobe conectada
-                active_target = self.main_app.ACTIVE_TARGET_SID_accessor()
-                if active_target:
-                    
-                    # 3. Determinar el nombre del bin (LÓGICA CORREGIDA)
-                    base_bin_name = None
-                    # Comprobar si hay una subcarpeta de lote (ej: "Mi Lote 01")
-                    if hasattr(self, 'subfolder_path') and self.subfolder_path:
-                        base_bin_name = os.path.basename(os.path.normpath(self.subfolder_path))
+            adobe_active = getattr(self.main_app, "adobe_enabled", True) and getattr(self.main_app, "adobe_import_batch", False)
+            davinci_active = getattr(self.main_app, "davinci_enabled", True) and getattr(self.main_app, "davinci_import_batch", False)
+            
+            if adobe_active or davinci_active:
+                # Determinar el nombre del bin
+                base_bin_name = None
+                if hasattr(self, 'subfolder_path') and self.subfolder_path:
+                    base_bin_name = os.path.basename(os.path.normpath(self.subfolder_path))
 
-                    target_bin_name = "Thumbnails" # Nombre por defecto
+                target_bin_name = "Thumbnails"
+                if base_bin_name:
+                    target_bin_name = f"{base_bin_name} - Thumbnails"
                     
-                    # Si había una carpeta de lote, crear un nombre combinado
-                    if base_bin_name:
-                        target_bin_name = f"{base_bin_name} - Thumbnails"
+                # A. Enviar a Adobe (usando la estructura de paquete antigua que acepta solo miniatura)
+                if adobe_active:
+                    active_target = self.main_app.ACTIVE_TARGET_SID_accessor()
+                    if active_target:
+                        file_package = {
+                            "video": None, 
+                            "thumbnail": final_path.replace('\\', '/'),
+                            "subtitle": None,
+                            "targetBin": target_bin_name
+                        }
+                        print(f"INFO: [Lote Miniaturas] Enviando paquete a Adobe CEP: {file_package}")
+                        self.main_app.socketio.emit('new_file', {'filePackage': file_package}, to=active_target)
+                
+                # B. Enviar a DaVinci Resolve
+                if davinci_active:
+                    import threading
+                    from src.core.davinci_api import importar_a_davinci
                     
-                    # 4. Armar el paquete (solo contiene la miniatura)
-                    file_package = {
-                        "video": None, # Importante: video es null
-                        "thumbnail": final_path.replace('\\', '/'), # Ruta de la imagen
-                        "subtitle": None,
-                        "targetBin": target_bin_name # ej: "Thumbnails" o "Mi Lote 01 - Thumbnails"
-                    }
+                    def run_davinci():
+                        try:
+                            print(f"INFO: [Lote Miniaturas] Enviando a DaVinci: {final_path}")
+                            importar_a_davinci(
+                                [final_path], 
+                                log_callback=print,
+                                import_to_timeline=getattr(self.main_app, 'davinci_import_to_timeline', True),
+                                bin_name=target_bin_name
+                            )
+                        except Exception as e:
+                            print(f"ERROR: Falló la importación a DaVinci: {e}")
                     
-                    print(f"INFO: [Lote Miniaturas] Enviando paquete a CEP: {file_package}")
-                    
-                    # 5. Enviar el paquete
-                    self.main_app.socketio.emit('new_file', {'filePackage': file_package}, to=active_target)
+                    threading.Thread(target=run_davinci, daemon=True).start()
             
         except Exception as e:
             # Restaurar backup si falló

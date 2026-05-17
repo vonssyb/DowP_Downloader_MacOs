@@ -55,11 +55,12 @@ def apply_yt_patch(ydl_opts):
         ydl_opts['extractor_args'] = {}
     
     ydl_opts['extractor_args']['youtube'] = {
-        'player_client': ['tv', 'web'],
-        'n_client': ['tv']
+        'player_client': ['web_safari', 'android', 'web', 'tv'],
+        'n_client': ['web_safari', 'android', 'tv'],
+        'skip': []
     }
     
-    print(f"✅ Parche aplicado (con cookies). Deno: {deno_path}")
+    print(f"✅ Parche de YouTube aplicado. Deno: {deno_path}")
     return ydl_opts
 
 
@@ -111,12 +112,16 @@ def download_media(url, ydl_opts, progress_callback, cancellation_event: threadi
     # 🔧 DETECTAR si hay cookies en ydl_opts
     use_cookies = 'cookiefile' in ydl_opts or 'cookiesfrombrowser' in ydl_opts
     
-    # 🔧 SOLO aplicar parche si hay cookies
-    if use_cookies:
+    # 🔧 Aplicar parche de YouTube SIEMPRE si la URL es de YouTube
+    is_youtube = 'youtube.com' in url.lower() or 'youtu.be' in url.lower()
+    if is_youtube:
         ydl_opts = apply_yt_patch(ydl_opts)
-        print("📥 Descarga: Con cookies (parche aplicado)")
+        print(f"📥 Descarga: YouTube detectado (parche aplicado, cookies={'SI' if use_cookies else 'NO'})")
+    elif use_cookies:
+        # Para otros sitios, aplicar solo si hay cookies (si fuera necesario, pero por ahora youtube es el foco)
+        print("📥 Descarga: Con cookies")
     else:
-        print("📥 Descarga: Sin cookies (configuración predeterminada de yt-dlp)")
+        print("📥 Descarga: Sin cookies")
     
     # Variables para tracking de progreso en fragmentos
     is_fragment = 'download_ranges' in ydl_opts
@@ -168,7 +173,12 @@ def download_media(url, ydl_opts, progress_callback, cancellation_event: threadi
             raise yt_dlp.utils.DownloadError("yt-dlp reportó un error durante la descarga.")
     
     ydl_opts['progress_hooks'] = [hook]
+    
+    # Intentar descargas concurrentes para fragmentos DASH/HLS
+    ydl_opts['concurrent_fragment_downloads'] = 5
     ydl_opts.setdefault('downloader', 'native')
+    if 'external_downloader' in ydl_opts:
+        ydl_opts.pop('external_downloader')
     
     if 'outtmpl' in ydl_opts:
         ydl_opts['restrictfilenames'] = True 

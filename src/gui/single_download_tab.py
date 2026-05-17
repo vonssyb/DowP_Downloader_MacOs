@@ -5106,8 +5106,11 @@ class SingleDownloadTab(ctk.CTkFrame):
             cookie_flag = f' --cookies-from-browser {browser_arg}'
             using_cookies = True
 
-        # Aplicar parche SOLO con cookies
-        if using_cookies:
+        # 🔧 Aplicar parche de YouTube SIEMPRE si la URL es de YouTube
+        is_youtube = 'youtube.com' in options["url"].lower() or 'youtu.be' in options["url"].lower()
+        if is_youtube:
+            ydl_opts = apply_yt_patch(ydl_opts)
+        elif using_cookies:
             ydl_opts = apply_yt_patch(ydl_opts)
 
         # 🔧 GENERACIÓN DE COMANDO CLI EQUIVALENTE
@@ -5152,15 +5155,9 @@ class SingleDownloadTab(ctk.CTkFrame):
                     try:
                         print(f"DEBUG: 🎬 Intentando descarga directa de fragmento")
                         
-                        # FIX: DowP's custom FFmpeg binary freezes when fetching YouTube HTTPS range requests.
-                        # We temporarily remove 'ffmpeg_location' to force yt-dlp to use the system FFmpeg.
-                        # If system FFmpeg doesn't exist, it will instantly raise a DownloadError and trigger the fallback dialog.
-                        original_ffmpeg = ydl_opts.pop('ffmpeg_location', None)
-                        try:
-                            downloaded_filepath = download_media(options["url"], ydl_opts, self.update_progress, self.cancellation_event)
-                        finally:
-                            if original_ffmpeg:
-                                ydl_opts['ffmpeg_location'] = original_ffmpeg
+                        # SE HA ELIMINADO EL FIX QUE QUITABA FFMPEG: 
+                        # Ahora intentamos usar el FFmpeg interno para aprovechar HLS y mayor velocidad.
+                        downloaded_filepath = download_media(options["url"], ydl_opts, self.update_progress, self.cancellation_event)
                                 
                         print(f"DEBUG: ✅ Fragmento descargado: {downloaded_filepath}")
                         
